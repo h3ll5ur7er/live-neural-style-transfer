@@ -3,6 +3,7 @@ import os
 import sys
 import time
 
+import cv2
 import numpy as np
 import torch
 from torch.autograd import Variable
@@ -10,11 +11,23 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision import transforms
+from imutils.video import FPS, WebcamVideoStream
 
 import utils
 from transformer_net import TransformerNet
 from vgg import Vgg16
 
+# Arrow keys
+UP_KEY = 82
+DOWN_KEY = 84
+RIGHT_KEY = 83
+LEFT_KEY = 81
+EXIT_KEYS = [113, 27]  # Escape and q
+models = [f for f in os.listdir('saved_models/') if f.endswith('.pth')]
+style_images = [f for f in os.listdir('images/style-images/') if f.endswith('.jpg')]
+models.sort()
+style_images.sort()
+SECONDS_PER_MODEL = 20
 
 def check_paths(args):
     try:
@@ -156,6 +169,89 @@ def stylize(args):
     output_data = output.data[0]
     utils.save_image(args.output_image, output_data)
 
+def load_model(style_model, args, model_idx=0):
+    # style_model.load_state_dict(torch.load(args.model))
+    cv2.imshow('style image', cv2.imread('images/style-images/' + style_images[model_idx]))
+    style_model.load_state_dict(torch.load("saved_models/" + models[model_idx]))
+    if args.cuda:
+        style_model.cuda()
+
+
+def demo(args):
+    n_models = len(models)
+    model_idx = 0
+    # content_image = utils.load_image(args.content_image, scale=args.content_scale)
+    content_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x.mul(255))
+    ])
+
+    style_model = TransformerNet()
+    load_model(style_model, args, model_idx)
+
+    fps = FPS().start()
+    stream = WebcamVideoStream(src=0).start()  # default camera
+    time.sleep(1.0)
+    last_time = time.time()
+    # start fps timer
+    # loop over frames from the video file stream
+    while True:
+        # Change style
+        if time.time() - last_time > SECONDS_PER_MODEL:
+            model_idx = (model_idx + 1) % n_models
+            load_model(style_model, args, model_idx)
+            last_time = time.time()
+
+        # grab next frame
+        content_image = stream.read()
+
+        content_image = content_transform(content_image)
+        content_image = content_image.unsqueeze(0)
+        if args.cuda:
+            content_image = content_image.cuda()
+        content_image = Variable(content_image, volatile=True)
+
+        # update FPS counter
+        fps.update()
+
+        output = style_model(content_image)
+        if args.cuda:
+            output = output.cpu()
+        output_data = output.data[0].numpy()
+        output_data = np.clip(output_data, 0, 255).astype(np.uint8)
+        output_data = np.transpose(output_data, (1, 2, 0))
+
+
+        key = cv2.waitKey(1) & 0xFF
+        # keybindings for display
+        if key == ord('p'):  # pause
+            while True:
+                key2 = cv2.waitKey(1) & 0xff
+                cv2.imshow('frame', frame)
+                if key2 == ord('p'):  # resume
+                    break
+        cv2.imshow('Output', output_data)
+        if key in EXIT_KEYS:  # exit
+            break
+        elif key in [LEFT_KEY, RIGHT_KEY]:
+            sign = -1 if key == LEFT_KEY else 1
+            model_idx += sign
+            if model_idx >= n_models:
+                model_idx = 0
+            elif model_idx < 0:
+                model_idx = n_models - 1
+
+            load_model(style_model, args, model_idx)
+            last_time = time.time()
+
+    stream.stop()
+
+    # stop the timer and display FPS information
+    fps.stop()
+
+    print("[INFO] elasped time: {:.2f}".format(fps.elapsed()))
+    print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
+
 
 def main():
     main_arg_parser = argparse.ArgumentParser(description="parser for fast-neural-style")
@@ -195,13 +291,13 @@ def main():
                                   help="number of batches after which a checkpoint of the trained model will be created")
 
     eval_arg_parser = subparsers.add_parser("eval", help="parser for evaluation/stylizing arguments")
-    eval_arg_parser.add_argument("--content-image", type=str, required=True,
+    eval_arg_parser.add_argument("--content-image", type=str, required=False,
                                  help="path to content image you want to stylize")
     eval_arg_parser.add_argument("--content-scale", type=float, default=None,
                                  help="factor for scaling down the content image")
-    eval_arg_parser.add_argument("--output-image", type=str, required=True,
+    eval_arg_parser.add_argument("--output-image", type=str, required=False,
                                  help="path for saving the output image")
-    eval_arg_parser.add_argument("--model", type=str, required=True,
+    eval_arg_parser.add_argument("--model", type=str, required=False,
                                  help="saved model to be used for stylizing the image")
     eval_arg_parser.add_argument("--cuda", type=int, required=True,
                                  help="set it to 1 for running on GPU, 0 for CPU")
@@ -219,7 +315,8 @@ def main():
         check_paths(args)
         train(args)
     else:
-        stylize(args)
+        demo(args)
+        # stylize(args)
 
 
 if __name__ == "__main__":
