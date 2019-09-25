@@ -27,4 +27,4 @@
 
 - `cd <repo_root>/fast_neural_style/`
 - `activate <env_name>`
-- `python neural_style/neural_style.py train --dataset dataset --style-image <path/to/style/image> --save-model-dir <model/output/path> --epochs 2 --cuda 1
+- `python neural_style/neural_style.py train --dataset dataset --style-image <path/to/style/image> --save-model-dir <model/output/path> --epochs 2 --cuda 1`
