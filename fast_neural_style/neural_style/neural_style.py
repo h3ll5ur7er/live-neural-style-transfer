@@ -18,10 +18,10 @@ from transformer_net import TransformerNet
 from vgg import Vgg16
 
 # Arrow keys
-UP_KEY = 82
-DOWN_KEY = 84
-RIGHT_KEY = 83
-LEFT_KEY = 81
+UP_KEY = ord("w")
+DOWN_KEY = ord("s")
+RIGHT_KEY = ord("d")
+LEFT_KEY = ord("a")
 EXIT_KEYS = [113, 27]  # Escape and q
 models = [f for f in os.listdir('saved_models/') if f.endswith('.pth')]
 style_images = [f for f in os.listdir('images/style-images/') if f.endswith('.jpg')]
@@ -190,7 +190,8 @@ def demo(args):
     load_model(style_model, args, model_idx)
 
     fps = FPS().start()
-    stream = WebcamVideoStream(src=0).start()  # default camera
+    stream = WebcamVideoStream(src=0)  # default camera
+    stream.start()  # default camera
     time.sleep(1.0)
     last_time = time.time()
     # start fps timer
@@ -223,14 +224,15 @@ def demo(args):
 
 
         key = cv2.waitKey(1) & 0xFF
+
         # keybindings for display
         if key == ord('p'):  # pause
             while True:
                 key2 = cv2.waitKey(1) & 0xff
-                cv2.imshow('frame', frame)
                 if key2 == ord('p'):  # resume
                     break
         cv2.imshow('Output', output_data)
+
         if key in EXIT_KEYS:  # exit
             break
         elif key in [LEFT_KEY, RIGHT_KEY]:
@@ -245,6 +247,7 @@ def demo(args):
             last_time = time.time()
 
     stream.stop()
+    stream.stream.release()
 
     # stop the timer and display FPS information
     fps.stop()
